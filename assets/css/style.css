@@ -12,7 +12,7 @@
   --ink: #2b2530;
   --ink-soft: #6b6472;
   --line: #e7e2ea;
-  --bg: #f6f4f8;
+  --bg: #fdeef2;
   --surface: #ffffff;
   --ok: #2f9e6f;
   --danger: #d1495b;
@@ -190,6 +190,58 @@ textarea { resize: vertical; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .form-grid label { margin-bottom: 12px; }
 
+/* ---------- 홈 · 메인 랜딩 ---------- */
+.home-hero {
+  position: relative; overflow: hidden;
+  border-radius: 22px; margin-bottom: 26px;
+  padding: 62px 44px;
+  background: url("../img/hero.svg") center/cover no-repeat, #c96b8e;
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(169, 79, 114, .32);
+}
+/* 사진 배경 사용 시 도형 장식은 숨김 */
+.home-hero-deco { display: none; }
+
+.home-hero-inner { position: relative; z-index: 1; max-width: 620px; }
+.home-eyebrow {
+  margin: 0 0 14px; font-size: 13.5px; font-weight: 600; letter-spacing: .04em;
+  opacity: .96; text-transform: none; text-shadow: 0 1px 6px rgba(0,0,0,.4);
+}
+.home-eyebrow::before { content: "💒 "; }
+.home-title { font-size: 34px; line-height: 1.28; font-weight: 800; margin: 0; letter-spacing: -.01em; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+.home-title .ring { display: inline-block; animation: ringPop 2.6s ease-in-out infinite; }
+@keyframes ringPop { 0%,100% { transform: rotate(0) scale(1);} 50% { transform: rotate(-12deg) scale(1.14);} }
+.home-date { margin: 16px 0 26px; font-size: 15px; opacity: .96; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+
+.home-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn-lg { padding: 13px 24px; font-size: 15px; font-weight: 700; border-radius: 12px; }
+.btn-white { background: #fff; color: var(--brand-dark); }
+.btn-white:hover { background: #fff; filter: brightness(.96); }
+.btn-glass { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.55); }
+.btn-glass:hover { background: rgba(255,255,255,.28); filter: none; }
+
+.home-section-title { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 0 14px; }
+
+.home-grid {
+  display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 18px; align-items: start;
+  margin-top: 8px;
+}
+
+/* 빠른 바로가기 타일 */
+.quick-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quick-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+  padding: 18px 10px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--brand-soft); color: var(--ink); font-size: 13.5px; font-weight: 600;
+  transition: transform .12s, box-shadow .12s, background .12s;
+}
+.quick-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); background: #fff; border-color: var(--brand); }
+.quick-tile .qt-ico { font-size: 26px; }
+
+/* 클릭 가능한 리스트 아이템 */
+.mini-list li.clickable-li { cursor: pointer; transition: border-color .12s, background .12s; }
+.mini-list li.clickable-li:hover { border-color: var(--brand); background: var(--brand-soft); }
+
 /* 월별/주별 세그먼트 토글 */
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
 .seg-btn { border: none; background: none; padding: 9px 16px; font-size: 14px; color: var(--ink-soft); }
@@ -217,6 +269,17 @@ textarea { resize: vertical; }
 .cal-cell .cal-dot {
   display: inline-block; margin-top: 4px; font-size: 11px;
   background: var(--brand); color: #fff; border-radius: 999px; padding: 1px 7px;
+}
+/* 요일 헤더 색상 */
+.cal-weekdays .wsun { color: var(--danger); }
+.cal-weekdays .wsat { color: #3b82f6; }
+/* 공휴일 / 주말 표시 */
+.cal-cell .cal-daynum { display: inline-block; }
+.cal-cell.sun .cal-daynum { color: var(--danger); font-weight: 600; }
+.cal-cell.sat .cal-daynum { color: #3b82f6; font-weight: 600; }
+.cal-holi {
+  display: block; margin-top: 2px; font-size: 10px; line-height: 1.15;
+  color: var(--danger); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .notify-layout, .content-right, .notify-right { display: grid; gap: 18px; }
@@ -247,6 +310,9 @@ textarea { resize: vertical; }
 /* ---------- 7) 반응형 ---------- */
 @media (max-width: 900px) {
   .content-layout, .calendar-layout, .notify-layout, .dash-two-col { grid-template-columns: 1fr; }
+  .home-grid { grid-template-columns: 1fr; }
+  .home-hero { padding: 40px 26px; }
+  .home-title { font-size: 27px; }
 }
 @media (max-width: 560px) {
   .form-grid { grid-template-columns: 1fr; }

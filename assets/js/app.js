@@ -2,7 +2,7 @@
    WediBoard 앱 로직
    구성: 1)유틸/상태 2)저장 3)라우팅 4)상담 대시보드 5)고객 관리
         6)마케팅 성과 7)콘텐츠 8)캘린더 9)알림 10)데이터(엑셀)
-        11)ROI 12)부팅
+        11)부팅
 ============================================================ */
 (function () {
   "use strict";
@@ -39,6 +39,30 @@
   const statusBadge = (s) => {
     const k = normStatus(s);
     return `<span class="status-badge" style="background:${STATUS_COLOR[k]}">${STATUS_KO[k]}</span>`;
+  };
+
+  // 대한민국 공휴일 (2025~2027) — 음력·대체공휴일 포함. 연도 추가 시 여기만 수정하면 됩니다.
+  const HOLIDAYS = {
+    // 2025
+    "2025-01-01": "신정", "2025-01-28": "설날", "2025-01-29": "설날", "2025-01-30": "설날",
+    "2025-03-01": "삼일절", "2025-03-03": "대체공휴일",
+    "2025-05-05": "어린이날·부처님오신날", "2025-05-06": "대체공휴일",
+    "2025-06-06": "현충일", "2025-08-15": "광복절",
+    "2025-10-03": "개천절", "2025-10-05": "추석", "2025-10-06": "추석", "2025-10-07": "추석", "2025-10-08": "대체공휴일",
+    "2025-10-09": "한글날", "2025-12-25": "성탄절",
+    // 2026
+    "2026-01-01": "신정", "2026-02-16": "설날", "2026-02-17": "설날", "2026-02-18": "설날",
+    "2026-03-01": "삼일절", "2026-03-02": "대체공휴일",
+    "2026-05-05": "어린이날", "2026-05-24": "부처님오신날", "2026-05-25": "대체공휴일",
+    "2026-06-06": "현충일", "2026-08-15": "광복절", "2026-08-17": "대체공휴일",
+    "2026-09-24": "추석", "2026-09-25": "추석", "2026-09-26": "추석", "2026-09-28": "대체공휴일",
+    "2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2026-10-09": "한글날", "2026-12-25": "성탄절",
+    // 2027
+    "2027-01-01": "신정", "2027-02-06": "설날", "2027-02-07": "설날", "2027-02-08": "설날",
+    "2027-03-01": "삼일절", "2027-05-05": "어린이날", "2027-05-13": "부처님오신날",
+    "2027-06-06": "현충일", "2027-06-07": "대체공휴일", "2027-08-15": "광복절", "2027-08-16": "대체공휴일",
+    "2027-09-14": "추석", "2027-09-15": "추석", "2027-09-16": "추석",
+    "2027-10-03": "개천절", "2027-10-04": "대체공휴일", "2027-10-09": "한글날", "2027-12-25": "성탄절",
   };
 
   const STORE_KEY = "wediboard_state_v1";
@@ -86,10 +110,11 @@
     $$(".nav-item").forEach((n) => n.classList.toggle("is-active", n.dataset.view === viewId));
     closeNav();
     if (viewId === "view-notify") renderNotifyOptions();
-    if (viewId === "view-roi") renderRoi();
     if (viewId === "view-dashboard") renderDashboardChart();
     if (viewId === "view-contract") renderContract();
     if (viewId === "view-customers") renderCustomers();
+    if (viewId === "view-home") renderHome();
+    if (viewId === "view-wedding") { renderWeddingCalendar(); renderWeddingDayList(); }
   }
   function openNav() { $("#app-nav").classList.add("is-open"); $("#nav-backdrop").hidden = false; }
   function closeNav() { $("#app-nav").classList.remove("is-open"); $("#nav-backdrop").hidden = true; }
@@ -103,8 +128,58 @@
   function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
   function parseYmd(s) { const d = new Date((s || "") + "T00:00"); return isNaN(d) ? null : d; }
 
+  /* ---------- 홈 · 메인 화면 ---------- */
+  function renderHome() {
+    const now = nowDate();
+    const today = ymd(now);
+    const mk = today.slice(0, 7);
+    const WD = ["일", "월", "화", "수", "목", "금", "토"];
+    const dateEl = $("#home-date");
+    if (dateEl) dateEl.textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WD[now.getDay()]})`;
+
+    const openStatuses = new Set(["new", "booked", "consulting", "quoted", "reviewing"]);
+    $("#home-kpi-consult").textContent = num(state.reservations.filter((r) => r.date === today).length);
+    $("#home-kpi-waiting").textContent = num(state.reservations.filter((r) => ["quoted", "reviewing"].includes(normStatus(r.status))).length);
+    $("#home-kpi-contact").textContent = num(state.reservations.filter((r) => r.next === today && openStatuses.has(normStatus(r.status))).length);
+    $("#home-kpi-contract").textContent = num(state.reservations.filter((r) => (r.date || "").startsWith(mk) && isContracted(r)).length);
+
+    // 다가오는 상담 일정 (오늘 이후, 가까운 순 5건)
+    const up = $("#home-upcoming");
+    const upcoming = state.reservations
+      .filter((r) => (r.date || "") >= today)
+      .sort((a, b) => ((a.date || "") + (a.time || "")).localeCompare((b.date || "") + (b.time || "")))
+      .slice(0, 5);
+    up.innerHTML = "";
+    if (upcoming.length === 0) { up.innerHTML = `<li class="empty">예정된 일정이 없습니다.</li>`; }
+    upcoming.forEach((r) => {
+      const li = document.createElement("li");
+      li.className = "clickable-li";
+      const dd = r.date === today ? "오늘" : (r.date || "");
+      li.innerHTML = `<span class="li-main"><strong>${dd} ${r.time || ""}</strong> ${escapeHtml(r.name)} ${statusBadge(r.status)}<br>
+        <span class="li-sub">${r.kind || "상담"} · 담당 ${escapeHtml(r.manager || "미지정")}</span></span>`;
+      li.addEventListener("click", () => openReservationModal(r));
+      up.appendChild(li);
+    });
+
+    // 최근 등록 고객 (상담일 최신순 5건)
+    const rc = $("#home-recent");
+    const recent = state.reservations.slice()
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .slice(0, 5);
+    rc.innerHTML = "";
+    if (recent.length === 0) { rc.innerHTML = `<li class="empty">등록된 고객이 없습니다.</li>`; }
+    recent.forEach((r) => {
+      const li = document.createElement("li");
+      li.className = "clickable-li";
+      li.innerHTML = `<span class="li-main"><strong>${escapeHtml(r.name)}</strong> ${statusBadge(r.status)}<br>
+        <span class="li-sub">${escapeHtml(r.phone || r.phone2 || "연락처 없음")} · 상담 ${escapeHtml(r.date || "-")}</span></span>`;
+      li.addEventListener("click", () => openReservationModal(r));
+      rc.appendChild(li);
+    });
+  }
+
   /* ---------- 4) 상담 대시보드 (계약 성과·매출) ---------- */
-  let contractChart = null, contractTrendChart = null, revenueTrendChart = null, sourceChart = null;
+  let contractChart = null, contractTrendChart = null, sourceChart = null;
   let contractUnit = "month";   // "month" | "week" | "all"
   let contractRef = null;
 
@@ -173,33 +248,6 @@
     });
   }
 
-  // 월별 매출 추이 (계약금액 합)
-  function renderRevenueTrend() {
-    if (typeof Chart === "undefined") return;
-    const ctx = $("#revenue-trend-canvas");
-    if (!ctx) return;
-    const ref = contractRef || nowDate();
-    const labels = [], values = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1);
-      const mk = ymd(d).slice(0, 7);
-      labels.push(`${Number(mk.slice(5))}월`);
-      values.push(state.reservations
-        .filter((r) => (r.date || "").startsWith(mk) && isContracted(r))
-        .reduce((a, r) => a + (Number(r.amount) || 0), 0));
-    }
-    const data = { labels, datasets: [{ label: "계약 매출(원)", data: values, borderColor: "#c96b8e", backgroundColor: "rgba(201,107,142,.18)", fill: true, tension: .3 }] };
-    if (revenueTrendChart) { revenueTrendChart.data = data; revenueTrendChart.update(); return; }
-    revenueTrendChart = new Chart(ctx, {
-      type: "line", data,
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true, ticks: { callback: (v) => (v / 10000).toLocaleString() + "만" } } },
-        plugins: { tooltip: { callbacks: { label: (c) => won(c.raw) } } },
-      },
-    });
-  }
-
   // 유입경로별 비율 (해당 기간)
   function renderSourceChart(list) {
     if (typeof Chart === "undefined") return;
@@ -245,20 +293,18 @@
 
     const c = list.filter(isContracted).length;
     const f = list.filter(isFailed).length;
-    const revenue = list.filter(isContracted).reduce((a, r) => a + (Number(r.amount) || 0), 0);
 
     $("#kpi-total").textContent = num(list.length);
     $("#kpi-contracted").textContent = num(c);
     $("#kpi-rate").textContent = contractRate(c, f) + "%";
-    $("#kpi-revenue").textContent = won(revenue);
 
     // 담당자별 집계
     const byMgr = {};
     list.forEach((r) => {
       const m = (r.manager || "").trim() || "(미지정)";
-      const g = (byMgr[m] = byMgr[m] || { total: 0, contracted: 0, progress: 0, failed: 0, revenue: 0 });
+      const g = (byMgr[m] = byMgr[m] || { total: 0, contracted: 0, progress: 0, failed: 0 });
       g.total++;
-      if (isContracted(r)) { g.contracted++; g.revenue += Number(r.amount) || 0; }
+      if (isContracted(r)) g.contracted++;
       else if (isFailed(r)) g.failed++;
       else if (normStatus(r.status) !== "canceled") g.progress++;
     });
@@ -266,18 +312,17 @@
     body.innerHTML = "";
     const entries = Object.entries(byMgr).sort((a, b) => b[1].contracted - a[1].contracted);
     if (entries.length === 0) {
-      body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft)">고객 데이터가 없습니다. 고객을 등록하고 진행 상태를 지정하세요.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft)">고객 데이터가 없습니다. 고객을 등록하고 진행 상태를 지정하세요.</td></tr>`;
     }
     entries.forEach(([m, g]) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${escapeHtml(m)}</td><td>${num(g.total)}</td>
         <td>${num(g.contracted)}</td><td>${num(g.progress)}</td><td>${num(g.failed)}</td>
-        <td><strong>${contractRate(g.contracted, g.failed)}%</strong></td><td>${won(g.revenue)}</td>`;
+        <td><strong>${contractRate(g.contracted, g.failed)}%</strong></td>`;
       body.appendChild(tr);
     });
 
     renderContractTrend();
-    renderRevenueTrend();
     renderSourceChart(list);
     renderFailReasons(list);
 
@@ -327,7 +372,7 @@
         }
         return true;
       })
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      .sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.time || "").localeCompare(b.time || ""));
 
     body.innerHTML = "";
     if (rows.length === 0) {
@@ -338,9 +383,9 @@
       tr.className = "clickable-row";
       const phone = r.phone || r.phone2 || "-";
       tr.innerHTML = `
+        <td>${escapeHtml(r.date || "-")}</td>
         <td><strong>${escapeHtml(r.name || "(무명)")}</strong></td>
         <td>${escapeHtml(phone)}</td>
-        <td>${escapeHtml(r.date || "-")}</td>
         <td>${escapeHtml(r.wedding || "미정")}</td>
         <td>${escapeHtml(r.manager || "미지정")}</td>
         <td>${escapeHtml(r.source || "-")}</td>
@@ -528,16 +573,24 @@
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     const todayStr = ymd(nowDate());
 
-    let html = `<div class="cal-weekdays">${["일","월","화","수","목","금","토"].map((d) => `<div>${d}</div>`).join("")}</div><div class="cal-days">`;
+    let html = `<div class="cal-weekdays">${["일","월","화","수","목","금","토"].map((d, i) => `<div class="${i === 0 ? "wsun" : i === 6 ? "wsat" : ""}">${d}</div>`).join("")}</div><div class="cal-days">`;
     const prevDays = new Date(calYear, calMonth, 0).getDate();
     for (let i = startDay - 1; i >= 0; i--) html += `<div class="cal-cell other">${prevDays - i}</div>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dow = new Date(calYear, calMonth, d).getDay();
+      const holi = HOLIDAYS[dateStr];
       const count = state.reservations.filter((r) => r.date === dateStr).length;
       const cls = ["cal-cell"];
       if (dateStr === todayStr) cls.push("today");
       if (dateStr === selectedDate) cls.push("selected");
-      html += `<button class="${cls.join(" ")}" data-date="${dateStr}">${d}${count ? `<br><span class="cal-dot">${count}건</span>` : ""}</button>`;
+      if (holi || dow === 0) cls.push("sun");
+      else if (dow === 6) cls.push("sat");
+      html += `<button class="${cls.join(" ")}" data-date="${dateStr}">` +
+        `<span class="cal-daynum">${d}</span>` +
+        (holi ? `<span class="cal-holi">${holi}</span>` : "") +
+        (count ? `<span class="cal-dot">${count}건</span>` : "") +
+        `</button>`;
     }
     html += `</div>`;
     grid.innerHTML = html;
@@ -556,8 +609,76 @@
     if (items.length === 0) { ul.innerHTML = `<li class="empty">예약이 없습니다.</li>`; return; }
     items.forEach((r) => {
       const li = document.createElement("li");
+      const src = (r.source || "").trim();
+      const srcText = src
+        ? (src === "컨설팅" && r.consultCompany ? `컨설팅 · ${escapeHtml(r.consultCompany)}` : escapeHtml(src))
+        : "미상";
       li.innerHTML = `<span class="li-main"><strong>${r.time || ""}</strong> ${escapeHtml(r.name)} ${statusBadge(r.status)}<br>
-        <span class="li-sub">${r.kind || "상담"} · ${escapeHtml(r.phone || "연락처 없음")} · 담당 ${escapeHtml(r.manager || "미지정")}</span></span>
+        <span class="li-sub">${r.kind || "상담"} · ${escapeHtml(r.phone || "연락처 없음")} · 담당 ${escapeHtml(r.manager || "미지정")}<br>
+        유입경로: ${srcText}</span></span>
+        <button title="수정">✏️</button>`;
+      li.querySelector("button").addEventListener("click", () => openReservationModal(r));
+      ul.appendChild(li);
+    });
+  }
+
+  /* ---------- 8-1) 예식 캘린더 (계약 완료 커플, 예식일 기준) ---------- */
+  let wedYear, wedMonth, wedSelected = null;
+  function initWeddingCal(d) { wedYear = d.getFullYear(); wedMonth = d.getMonth(); }
+  // 예식일 기준 계약 완료 커플
+  const weddingsOn = (dateStr) => state.reservations.filter((r) => r.wedding === dateStr && isContracted(r));
+
+  function renderWeddingCalendar() {
+    const grid = $("#wedding-grid");
+    if (!grid) return;
+    if (wedYear == null) initWeddingCal(nowDate());
+    $("#wed-title").textContent = `${wedYear}. ${String(wedMonth + 1).padStart(2, "0")}`;
+    const startDay = new Date(wedYear, wedMonth, 1).getDay();
+    const daysInMonth = new Date(wedYear, wedMonth + 1, 0).getDate();
+    const todayStr = ymd(nowDate());
+
+    let monthCount = 0;
+    let html = `<div class="cal-weekdays">${["일","월","화","수","목","금","토"].map((d, i) => `<div class="${i === 0 ? "wsun" : i === 6 ? "wsat" : ""}">${d}</div>`).join("")}</div><div class="cal-days">`;
+    const prevDays = new Date(wedYear, wedMonth, 0).getDate();
+    for (let i = startDay - 1; i >= 0; i--) html += `<div class="cal-cell other">${prevDays - i}</div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${wedYear}-${String(wedMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dow = new Date(wedYear, wedMonth, d).getDay();
+      const holi = HOLIDAYS[dateStr];
+      const count = weddingsOn(dateStr).length;
+      monthCount += count;
+      const cls = ["cal-cell"];
+      if (dateStr === todayStr) cls.push("today");
+      if (dateStr === wedSelected) cls.push("selected");
+      if (holi || dow === 0) cls.push("sun");
+      else if (dow === 6) cls.push("sat");
+      html += `<button class="${cls.join(" ")}" data-date="${dateStr}">` +
+        `<span class="cal-daynum">${d}</span>` +
+        (holi ? `<span class="cal-holi">${holi}</span>` : "") +
+        (count ? `<span class="cal-dot wed-dot">💍${count}</span>` : "") +
+        `</button>`;
+    }
+    html += `</div>`;
+    grid.innerHTML = html;
+    grid.querySelectorAll(".cal-cell[data-date]").forEach((cell) => {
+      cell.addEventListener("click", () => { wedSelected = cell.dataset.date; renderWeddingCalendar(); renderWeddingDayList(); });
+    });
+    $("#wed-monthcount").textContent = `이 달 예식 ${monthCount}건`;
+  }
+
+  function renderWeddingDayList() {
+    const title = $("#wed-daylist-title");
+    const ul = $("#wed-daylist-items");
+    if (!wedSelected) { title.textContent = "날짜를 선택하세요"; ul.innerHTML = ""; return; }
+    title.textContent = `${wedSelected} 예식`;
+    const items = weddingsOn(wedSelected);
+    ul.innerHTML = "";
+    if (items.length === 0) { ul.innerHTML = `<li class="empty">예정된 예식이 없습니다.</li>`; return; }
+    items.forEach((r) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="li-main"><strong>${escapeHtml(r.name)}</strong> ${statusBadge(r.status)}<br>
+        <span class="li-sub">${escapeHtml(r.venue || "예식장 미정")}${r.region ? " · " + escapeHtml(r.region) : ""}${r.guests ? " · 하객 " + num(r.guests) + "명" : ""}<br>
+        ${escapeHtml(r.phone || r.phone2 || "연락처 없음")} · 담당 ${escapeHtml(r.manager || "미지정")}</span></span>
         <button title="수정">✏️</button>`;
       li.querySelector("button").addEventListener("click", () => openReservationModal(r));
       ul.appendChild(li);
@@ -571,20 +692,61 @@
   function toggleFailReason() {
     $("#res-failreason-wrap").hidden = $("#res-status").value !== "failed";
   }
+  function toggleConsult() {
+    const show = $("#res-source").value === "컨설팅";
+    $("#res-consult-company-wrap").hidden = !show;
+    $("#res-consult-manager-wrap").hidden = !show;
+    $("#res-consult-phone-wrap").hidden = !show;
+  }
+
+  // 상담 시간 슬롯 (10:00 ~ 19:30, 30분 단위)
+  const TIME_SLOTS = (() => {
+    const arr = [];
+    for (let h = 10; h <= 19; h++) { arr.push(`${String(h).padStart(2, "0")}:00`); arr.push(`${String(h).padStart(2, "0")}:30`); }
+    return arr;
+  })();
+  // 특정 날짜에 이미 예약된 시간 집합 (현재 편집 중인 예약은 제외)
+  function bookedTimesOn(dateStr, exceptId) {
+    return new Set(state.reservations.filter((r) => r.date === dateStr && r.id !== exceptId && r.time).map((r) => r.time));
+  }
+  // 시간 드롭다운 렌더 — 예약된 시간은 (예약됨) 표시 + 선택 불가
+  function populateTimeSlots(dateStr, exceptId, selected) {
+    const sel = $("#res-time");
+    const booked = bookedTimesOn(dateStr, exceptId);
+    const slots = TIME_SLOTS.slice();
+    if (selected && !slots.includes(selected)) slots.push(selected); // 구데이터 호환
+    slots.sort();
+    sel.innerHTML = slots.map((t) => {
+      const isBooked = booked.has(t) && t !== selected;
+      return `<option value="${t}"${isBooked ? " disabled" : ""}>${t}${isBooked ? " (예약됨)" : ""}</option>`;
+    }).join("");
+    // 기존 선택이 유효하면 유지, 아니면 첫 가용 슬롯 선택
+    sel.value = (selected && !booked.has(selected)) ? selected : (slots.find((t) => !booked.has(t)) || "");
+  }
 
   function openReservationModal(res) {
     const modal = $("#reservation-modal");
     modal.hidden = false;
     $("#reservation-modal-title").textContent = res ? "고객 정보 수정" : "고객 등록";
     $("#res-id").value = res ? res.id : "";
-    $("#res-name").value = res ? (res.name || "") : "";
-    $("#res-email").value = res ? (res.email || "") : "";
+    // 신랑/신부 이름 — 구버전(합쳐진 고객명)은 구분자로 분리해 채움
+    let groom = res ? (res.groom || "") : "";
+    let bride = res ? (res.bride || "") : "";
+    if (res && !groom && !bride && res.name) {
+      const parts = String(res.name).split(/\s*[·,/&]\s*/);
+      groom = parts[0] || ""; bride = parts[1] || "";
+    }
+    $("#res-groom").value = groom;
+    $("#res-bride").value = bride;
     $("#res-phone").value = res ? (res.phone || "") : "";
     $("#res-phone2").value = res ? (res.phone2 || "") : "";
     $("#res-source").value = res ? (res.source || "") : "";
     $("#res-manager").value = res ? (res.manager || "") : "";
+    $("#res-consult-company").value = res ? (res.consultCompany || "") : "";
+    $("#res-consult-manager").value = res ? (res.consultManager || "") : "";
+    $("#res-consult-phone").value = res ? (res.consultPhone || "") : "";
     $("#res-date").value = res ? (res.date || "") : (selectedDate || ymd(nowDate()));
-    $("#res-time").value = res ? (res.time || "14:00") : "14:00";
+    populateTimeSlots($("#res-date").value, res ? res.id : "", res ? (res.time || "") : "");
     $("#res-kind").value = res ? (res.kind || "상담") : "상담";
     $("#res-next").value = res ? (res.next || "") : "";
     $("#res-wedding").value = res ? (res.wedding || "") : "";
@@ -593,28 +755,37 @@
     $("#res-guests").value = res ? (res.guests || "") : "";
     $("#res-status").value = res ? normStatus(res.status) : "new";
     $("#res-failreason").value = res ? (res.failReason || "") : "";
-    $("#res-budget").value = res ? (res.budget || "") : "";
-    $("#res-amount").value = res ? (res.amount || "") : "";
     $("#res-memo").value = res ? (res.memo || "") : "";
     $("#btn-res-delete").hidden = !res;
     toggleFailReason();
+    toggleConsult();
   }
   function closeReservationModal() { $("#reservation-modal").hidden = true; }
 
   function saveReservation(e) {
     e.preventDefault();
     const id = $("#res-id").value;
+    const groom = $("#res-groom").value.trim();
+    const bride = $("#res-bride").value.trim();
+    if (!groom && !bride) { toast("신랑 또는 신부 이름을 입력하세요."); return; }
+    // 같은 날짜·시간에 이미 예약이 있으면 저장 차단
+    if (bookedTimesOn($("#res-date").value, id).has($("#res-time").value)) {
+      toast("이미 예약된 시간입니다. 다른 시간을 선택하세요."); return;
+    }
     const data = {
-      name: $("#res-name").value.trim(), email: $("#res-email").value.trim(),
+      groom, bride,
+      name: [groom, bride].filter(Boolean).join(" · "),
       phone: $("#res-phone").value.trim(), phone2: $("#res-phone2").value.trim(),
       source: $("#res-source").value, manager: $("#res-manager").value.trim(),
+      consultCompany: $("#res-source").value === "컨설팅" ? $("#res-consult-company").value.trim() : "",
+      consultManager: $("#res-source").value === "컨설팅" ? $("#res-consult-manager").value.trim() : "",
+      consultPhone: $("#res-source").value === "컨설팅" ? $("#res-consult-phone").value.trim() : "",
       date: $("#res-date").value, time: $("#res-time").value, kind: $("#res-kind").value,
       next: $("#res-next").value, wedding: $("#res-wedding").value,
       venue: $("#res-venue").value.trim(), region: $("#res-region").value.trim(),
       guests: Number($("#res-guests").value) || 0,
       status: $("#res-status").value,
       failReason: $("#res-status").value === "failed" ? $("#res-failreason").value : "",
-      budget: Number($("#res-budget").value) || 0, amount: Number($("#res-amount").value) || 0,
       memo: $("#res-memo").value.trim(),
     };
     if (id) {
@@ -626,7 +797,8 @@
     save();
     selectedDate = data.date;
     initCalendarToDate(new Date(data.date + "T00:00"));
-    renderCalendar(); renderDayList(); renderContract(); renderCustomers();
+    renderCalendar(); renderDayList(); renderContract(); renderCustomers(); renderHome();
+    renderWeddingCalendar(); renderWeddingDayList();
     closeReservationModal();
     toast("고객 정보를 저장했습니다.");
   }
@@ -636,6 +808,7 @@
     if (!confirm("이 고객 정보를 삭제할까요?")) return;
     state.reservations = state.reservations.filter((x) => x.id !== id);
     save(); renderCalendar(); renderDayList(); renderContract(); renderCustomers();
+    renderHome(); renderWeddingCalendar(); renderWeddingDayList();
     closeReservationModal();
     toast("삭제했습니다.");
   }
@@ -681,11 +854,13 @@
     if (typeof XLSX === "undefined") { toast("엑셀 라이브러리 로딩 중입니다. 잠시 후 다시 시도하세요."); return; }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.reservations.map(({ id, ...r }) => ({
-      고객명: r.name, 신랑연락처: r.phone, 신부연락처: r.phone2 || "", 이메일: r.email || "",
-      유입경로: r.source || "", 담당자: r.manager || "", 상담일: r.date, 상담시간: r.time, 구분: r.kind,
+      고객명: r.name, 신랑이름: r.groom || "", 신부이름: r.bride || "",
+      신랑연락처: r.phone, 신부연락처: r.phone2 || "",
+      유입경로: r.source || "", 컨설팅회사: r.consultCompany || "", 컨설팅담당자: r.consultManager || "", 컨설팅연락처: r.consultPhone || "",
+      담당자: r.manager || "", 상담일: r.date, 상담시간: r.time, 구분: r.kind,
       다음연락일: r.next || "", 예식예정일: r.wedding || "", 예식장: r.venue || "", 지역: r.region || "",
       하객수: r.guests || 0, 진행상태: STATUS_KO[normStatus(r.status)], 미체결사유: r.failReason || "",
-      "예산(원)": r.budget || 0, "계약금액(원)": r.amount || 0, 메모: r.memo || "",
+      메모: r.memo || "",
     }))), "고객");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.metrics.map(({ id, ...r }) => ({
       채널: r.channel, 노출수: r.impressions, 클릭수: r.clicks, 문의전환: r.conversions, "예산(원)": r.budget,
@@ -710,11 +885,16 @@
         }));
       }
       if (rRows.length) {
-        state.reservations = rRows.map((r) => ({
+        state.reservations = rRows.map((r) => {
+          const g = String(r["신랑이름"] || ""), b = String(r["신부이름"] || "");
+          const combined = [g, b].filter(Boolean).join(" · ");
+          return {
           id: uid(),
-          name: String(r["고객명"] || r["이름"] || ""),
+          groom: g, bride: b,
+          name: String(r["고객명"] || r["이름"] || combined),
           phone: String(r["신랑연락처"] || r["연락처"] || ""), phone2: String(r["신부연락처"] || ""),
           email: String(r["이메일"] || ""), source: String(r["유입경로"] || ""),
+          consultCompany: String(r["컨설팅회사"] || ""), consultManager: String(r["컨설팅담당자"] || ""), consultPhone: String(r["컨설팅연락처"] || ""),
           manager: String(r["담당자"] || ""),
           date: String(r["상담일"] || r["날짜"] || ""), time: String(r["상담시간"] || r["시간"] || ""),
           kind: String(r["구분"] || "상담"), next: String(r["다음연락일"] || ""),
@@ -724,7 +904,8 @@
           failReason: String(r["미체결사유"] || ""),
           budget: Number(r["예산(원)"] || 0), amount: Number(r["계약금액(원)"] || 0),
           memo: String(r["메모"] || ""),
-        }));
+          };
+        });
       }
       save(); renderAll();
       toast("엑셀 데이터를 복원했습니다.");
@@ -742,36 +923,9 @@
     reader.readAsArrayBuffer(file);
   }
 
-  /* ---------- 11) ROI ---------- */
-  let roiChart = null;
-  function renderRoi() {
-    const body = $("#roi-table-body");
-    body.innerHTML = "";
-    const rows = state.metrics.map((m) => ({
-      channel: m.channel || "(무명)", budget: m.budget || 0, conv: m.conversions || 0,
-      cpa: m.conversions ? Math.round((m.budget || 0) / m.conversions) : null,
-    }));
-    if (rows.length === 0) {
-      body.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft)">마케팅 성과 데이터를 먼저 입력하세요.</td></tr>`;
-    }
-    rows.forEach((r) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${escapeHtml(r.channel)}</td><td>${won(r.budget)}</td><td>${num(r.conv)}</td>
-        <td>${r.cpa == null ? "-" : won(r.cpa)}</td>`;
-      body.appendChild(tr);
-    });
-    if (typeof Chart === "undefined") return;
-    const ctx = $("#roi-chart-canvas");
-    const data = {
-      labels: rows.map((r) => r.channel),
-      datasets: [{ label: "전환당 비용(원)", data: rows.map((r) => r.cpa || 0), backgroundColor: "#7a86d1" }],
-    };
-    if (roiChart) { roiChart.data = data; roiChart.update(); return; }
-    roiChart = new Chart(ctx, { type: "bar", data, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
-  }
-
   /* ---------- 렌더 총괄 ---------- */
   function renderAll() {
+    renderHome();
     renderContract();
     renderCustomers();
     renderDashboard();
@@ -779,9 +933,10 @@
     renderContentHistory();
     renderCalendar();
     renderDayList();
+    renderWeddingCalendar();
+    renderWeddingDayList();
     renderNotifyHistory();
     renderNotifyOptions();
-    renderRoi();
     updateCacheInfo();
   }
 
@@ -797,6 +952,8 @@
 
     // 내비게이션
     $$(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
+    // 홈 화면의 바로가기 버튼 (data-goto)
+    $$("[data-goto]").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.goto)));
     $("#nav-toggle").addEventListener("click", openNav);
     $("#nav-backdrop").addEventListener("click", closeNav);
 
@@ -837,8 +994,19 @@
     $("#cal-next").addEventListener("click", () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
     $("#cal-today").addEventListener("click", () => { initCalendarToDate(nowDate()); selectedDate = ymd(nowDate()); renderCalendar(); renderDayList(); });
     $("#btn-add-reservation").addEventListener("click", () => openReservationModal(null));
+
+    // 예식 캘린더
+    initWeddingCal(nowDate());
+    $("#wed-prev").addEventListener("click", () => { wedMonth--; if (wedMonth < 0) { wedMonth = 11; wedYear--; } renderWeddingCalendar(); });
+    $("#wed-next").addEventListener("click", () => { wedMonth++; if (wedMonth > 11) { wedMonth = 0; wedYear++; } renderWeddingCalendar(); });
+    $("#wed-today").addEventListener("click", () => { initWeddingCal(nowDate()); wedSelected = ymd(nowDate()); renderWeddingCalendar(); renderWeddingDayList(); });
     $("#reservation-form").addEventListener("submit", saveReservation);
     $("#res-status").addEventListener("change", toggleFailReason);
+    $("#res-source").addEventListener("change", toggleConsult);
+    // 날짜 변경 시 예약된 시간 슬롯을 다시 계산해 표시
+    $("#res-date").addEventListener("change", () => {
+      populateTimeSlots($("#res-date").value, $("#res-id").value, $("#res-time").value);
+    });
     $("#btn-res-delete").addEventListener("click", deleteReservation);
     $$("[data-close-modal]").forEach((el) => el.addEventListener("click", closeReservationModal));
 

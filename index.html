@@ -34,13 +34,14 @@
 
     <!-- [app-nav] 사이드 내비게이션 -->
     <nav id="app-nav" class="app-nav">
-      <button class="nav-item is-active" data-view="view-contract"><span>📊</span> 상담 대시보드</button>
+      <button class="nav-item is-active" data-view="view-home"><span>🏠</span> 홈</button>
+      <button class="nav-item" data-view="view-contract"><span>📊</span> 상담 대시보드</button>
       <button class="nav-item" data-view="view-customers"><span>👥</span> 고객 관리</button>
       <button class="nav-item" data-view="view-calendar"><span>📅</span> 예약/상담 일정</button>
+      <button class="nav-item" data-view="view-wedding"><span>💍</span> 예식 캘린더</button>
       <button class="nav-item" data-view="view-dashboard"><span>📣</span> 마케팅 성과</button>
       <button class="nav-item" data-view="view-content"><span>🎨</span> 콘텐츠 제작</button>
       <button class="nav-item" data-view="view-notify"><span>💬</span> 알림 발송</button>
-      <button class="nav-item" data-view="view-roi"><span>📈</span> 채널 ROI</button>
       <button class="nav-item" data-view="view-data"><span>💾</span> 데이터 관리</button>
       <button class="nav-item" data-view="view-settings"><span>⚙️</span> 설정</button>
     </nav>
@@ -50,9 +51,66 @@
     <main id="app-content" class="app-content">
 
       <!-- ========================================================
+           [view-home] 홈 · 메인 랜딩 화면
+      ========================================================= -->
+      <section id="view-home" class="view is-active">
+
+        <!-- 히어로 배너 -->
+        <div class="home-hero">
+          <div class="home-hero-deco" aria-hidden="true"></div>
+          <div class="home-hero-inner">
+            <p class="home-eyebrow">웨딩홀 상담·예약 통합 관리 플랫폼</p>
+            <h1 class="home-title">오늘도 예비부부의<br>특별한 시작을 함께합니다 <span class="ring">💍</span></h1>
+            <p class="home-date" id="home-date"></p>
+            <div class="home-cta">
+              <button class="btn btn-lg btn-white" data-goto="view-customers">＋ 고객 등록·관리</button>
+              <button class="btn btn-lg btn-glass" data-goto="view-calendar">📅 예약 일정 보기</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 오늘 현황 -->
+        <h3 class="home-section-title">오늘의 현황</h3>
+        <div class="kpi-grid">
+          <div class="kpi-card accent-blue"><span class="kpi-label">오늘 상담 예약</span><strong id="home-kpi-consult" class="kpi-value">0</strong></div>
+          <div class="kpi-card accent-orange"><span class="kpi-label">계약 대기</span><strong id="home-kpi-waiting" class="kpi-value">0</strong></div>
+          <div class="kpi-card accent-red"><span class="kpi-label">오늘 연락 예정</span><strong id="home-kpi-contact" class="kpi-value">0</strong></div>
+          <div class="kpi-card accent-green"><span class="kpi-label">이번 달 계약</span><strong id="home-kpi-contract" class="kpi-value">0</strong></div>
+        </div>
+
+        <div class="home-grid">
+          <!-- 빠른 바로가기 -->
+          <div class="card">
+            <h3>빠른 바로가기</h3>
+            <div class="quick-tiles">
+              <button class="quick-tile" data-goto="view-customers"><span class="qt-ico">👥</span>고객 관리</button>
+              <button class="quick-tile" data-goto="view-calendar"><span class="qt-ico">📅</span>예약 일정</button>
+              <button class="quick-tile" data-goto="view-contract"><span class="qt-ico">📊</span>상담 대시보드</button>
+              <button class="quick-tile" data-goto="view-dashboard"><span class="qt-ico">📣</span>마케팅 성과</button>
+              <button class="quick-tile" data-goto="view-content"><span class="qt-ico">🎨</span>콘텐츠 제작</button>
+              <button class="quick-tile" data-goto="view-notify"><span class="qt-ico">💬</span>알림 발송</button>
+            </div>
+          </div>
+
+          <!-- 다가오는 상담 일정 -->
+          <div class="card">
+            <h3>다가오는 상담 일정</h3>
+            <ul id="home-upcoming" class="mini-list"><!-- JS 렌더 --></ul>
+          </div>
+
+          <!-- 최근 등록 고객 -->
+          <div class="card">
+            <h3>최근 등록 고객</h3>
+            <ul id="home-recent" class="mini-list"><!-- JS 렌더 --></ul>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ========================================================
            [view-contract] 상담 대시보드 (오늘 현황·주별/월별 실적·매출)
       ========================================================= -->
-      <section id="view-contract" class="view is-active">
+      <section id="view-contract" class="view">
         <div class="view-head">
           <h2>📊 상담 대시보드</h2>
           <p class="view-sub">오늘 현황과 주별·월별 계약 실적을 한눈에 확인합니다.</p>
@@ -81,18 +139,11 @@
           <div class="kpi-card"><span class="kpi-label">총 상담/예약</span><strong id="kpi-total" class="kpi-value">0</strong></div>
           <div class="kpi-card"><span class="kpi-label">계약 체결</span><strong id="kpi-contracted" class="kpi-value">0</strong></div>
           <div class="kpi-card"><span class="kpi-label">체결률</span><strong id="kpi-rate" class="kpi-value">0%</strong></div>
-          <div class="kpi-card"><span class="kpi-label">계약 매출</span><strong id="kpi-revenue" class="kpi-value">0원</strong></div>
         </div>
 
-        <div class="dash-two-col">
-          <div id="contract-trend" class="card">
-            <h3 id="contract-trend-title">기간별 계약(체결) 건수</h3>
-            <div class="chart-wrap"><canvas id="contract-trend-canvas"></canvas></div>
-          </div>
-          <div id="revenue-trend" class="card">
-            <h3 id="revenue-trend-title">월별 매출 추이</h3>
-            <div class="chart-wrap"><canvas id="revenue-trend-canvas"></canvas></div>
-          </div>
+        <div id="contract-trend" class="card">
+          <h3 id="contract-trend-title">기간별 계약(체결) 건수</h3>
+          <div class="chart-wrap"><canvas id="contract-trend-canvas"></canvas></div>
         </div>
 
         <div class="dash-two-col">
@@ -111,7 +162,7 @@
           <div class="table-wrap">
             <table class="data-table">
               <thead>
-                <tr><th>담당자</th><th>총건</th><th>체결</th><th>진행중</th><th>미체결</th><th>체결률</th><th>계약매출</th></tr>
+                <tr><th>담당자</th><th>총건</th><th>체결</th><th>진행중</th><th>미체결</th><th>체결률</th></tr>
               </thead>
               <tbody id="contract-manager-body"><!-- JS 렌더 --></tbody>
             </table>
@@ -157,7 +208,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>고객명</th><th>연락처</th><th>상담일</th><th>예식일</th>
+                  <th>상담일</th><th>고객명</th><th>연락처</th><th>예식일</th>
                   <th>담당자</th><th>유입경로</th><th>진행상태</th><th>다음연락</th><th></th>
                 </tr>
               </thead>
@@ -191,6 +242,34 @@
           <div id="calendar-daylist" class="card">
             <h3 id="daylist-title">날짜를 선택하세요</h3>
             <ul id="daylist-items" class="mini-list"><!-- JS 렌더 --></ul>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ========================================================
+           [view-wedding] 예식 캘린더 (계약 완료 커플, 예식일 기준)
+      ========================================================= -->
+      <section id="view-wedding" class="view">
+        <div class="view-head">
+          <h2>💍 예식 캘린더</h2>
+          <p class="view-sub">계약이 완료된 신랑신부를 예식 예정일 기준으로 확인합니다.</p>
+        </div>
+
+        <div id="wedding-toolbar" class="toolbar">
+          <button id="wed-prev" class="btn btn-ghost">◀</button>
+          <strong id="wed-title" class="cal-title">2026. 07</strong>
+          <button id="wed-next" class="btn btn-ghost">▶</button>
+          <button id="wed-today" class="btn btn-outline">오늘</button>
+          <span class="spacer"></span>
+          <span class="muted" id="wed-monthcount"></span>
+        </div>
+
+        <div class="calendar-layout">
+          <div id="wedding-grid" class="card calendar-grid"><!-- JS 렌더 --></div>
+          <div id="wedding-daylist" class="card">
+            <h3 id="wed-daylist-title">날짜를 선택하세요</h3>
+            <ul id="wed-daylist-items" class="mini-list"><!-- JS 렌더 --></ul>
           </div>
         </div>
       </section>
@@ -338,33 +417,6 @@
 
 
       <!-- ========================================================
-           [view-roi] 채널별 ROI 비교
-      ========================================================= -->
-      <section id="view-roi" class="view">
-        <div class="view-head">
-          <h2>📈 채널 ROI 비교</h2>
-          <p class="view-sub">마케팅비 대비 문의전환 효율을 비교합니다.</p>
-        </div>
-
-        <div id="roi-summary" class="card">
-          <h3>채널별 효율</h3>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr><th>채널</th><th>예산(원)</th><th>문의전환</th><th>전환당 비용</th></tr>
-              </thead>
-              <tbody id="roi-table-body"><!-- JS 렌더 --></tbody>
-            </table>
-          </div>
-        </div>
-        <div id="roi-chart" class="card">
-          <h3>전환당 비용 비교</h3>
-          <div class="chart-wrap"><canvas id="roi-chart-canvas"></canvas></div>
-        </div>
-      </section>
-
-
-      <!-- ========================================================
            [view-data] 데이터 백업/내보내기
       ========================================================= -->
       <section id="view-data" class="view">
@@ -433,24 +485,33 @@
 
         <div class="form-section-title">고객 정보</div>
         <div class="form-grid">
-          <label><span>고객명 (예비부부)</span><input type="text" id="res-name" placeholder="예: 홍길동 · 김영희" required /></label>
-          <label><span>이메일</span><input type="email" id="res-email" placeholder="example@email.com" /></label>
+          <label><span>신랑 이름</span><input type="text" id="res-groom" placeholder="예: 홍길동" /></label>
           <label><span>신랑 연락처</span><input type="tel" id="res-phone" placeholder="010-0000-0000" /></label>
+          <label><span>신부 이름</span><input type="text" id="res-bride" placeholder="예: 김영희" /></label>
           <label><span>신부 연락처</span><input type="tel" id="res-phone2" placeholder="010-0000-0000" /></label>
           <label><span>유입경로</span>
             <select id="res-source">
               <option value="">선택</option>
-              <option>인스타그램</option><option>네이버</option><option>지인소개</option>
-              <option>웨딩박람회</option><option>홈페이지</option><option>기타</option>
+              <option>워킹</option>
+              <option>전화</option>
+              <option>컨설팅</option>
+              <option>지인소개</option>
+              <option>홈페이지</option>
+              <option>인터넷검색</option>
+              <option>검색</option>
+              <option>기타</option>
             </select>
           </label>
           <label><span>담당자</span><input type="text" id="res-manager" placeholder="예: 김수진" /></label>
+          <label id="res-consult-company-wrap" class="consult-field" hidden><span>컨설팅 회사명</span><input type="text" id="res-consult-company" placeholder="예: OO웨딩컨설팅" /></label>
+          <label id="res-consult-manager-wrap" class="consult-field" hidden><span>컨설팅 담당자</span><input type="text" id="res-consult-manager" placeholder="예: 이지원 실장" /></label>
+          <label id="res-consult-phone-wrap" class="consult-field" hidden><span>컨설팅 담당자 연락처</span><input type="tel" id="res-consult-phone" placeholder="010-0000-0000" /></label>
         </div>
 
         <div class="form-section-title">상담/일정</div>
         <div class="form-grid">
           <label><span>상담일</span><input type="date" id="res-date" required /></label>
-          <label><span>상담 시간</span><input type="time" id="res-time" required /></label>
+          <label><span>상담 시간</span><select id="res-time" required><!-- JS 렌더 --></select></label>
           <label><span>구분</span>
             <select id="res-kind"><option value="상담">상담</option><option value="예약">예약</option></select>
           </label>
@@ -477,8 +538,6 @@
               <option>연락 두절</option><option>보류</option><option>기타</option>
             </select>
           </label>
-          <label><span>예산 (원)</span><input type="number" id="res-budget" placeholder="예: 30000000" min="0" /></label>
-          <label><span>계약 금액 (원)</span><input type="number" id="res-amount" placeholder="예: 32000000" min="0" /></label>
         </div>
 
         <label><span>요구사항 / 메모</span><textarea id="res-memo" rows="2"></textarea></label>
