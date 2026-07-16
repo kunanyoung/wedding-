@@ -17,6 +17,11 @@
   <!-- 외부 라이브러리 (Vercel 정적 배포 · CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=East+Sea+Dokdo&family=Hi+Melody&display=swap" rel="stylesheet">
+
+
 </head>
 
 <body>
@@ -39,6 +44,7 @@
       <button class="nav-item" data-view="view-customers"><span>👥</span> 고객 관리</button>
       <button class="nav-item" data-view="view-calendar"><span>📅</span> 예약/상담 일정</button>
       <button class="nav-item" data-view="view-wedding"><span>💍</span> 예식 캘린더</button>
+      <button class="nav-item" data-view="view-checklist"><span>📋</span> 예식 체크리스트</button>
       <button class="nav-item" data-view="view-dashboard"><span>📣</span> 마케팅 성과</button>
       <button class="nav-item" data-view="view-content"><span>🎨</span> 콘텐츠 제작</button>
       <button class="nav-item" data-view="view-notify"><span>💬</span> 알림 발송</button>
@@ -272,6 +278,31 @@
             <ul id="wed-daylist-items" class="mini-list"><!-- JS 렌더 --></ul>
           </div>
         </div>
+      </section>
+
+
+      <!-- ========================================================
+           [view-checklist] 예식 최종 체크리스트 (계약 완료 커플)
+      ========================================================= -->
+      <section id="view-checklist" class="view">
+        <div class="view-head">
+          <h2>📋 예식 체크리스트</h2>
+          <p class="view-sub">계약 완료 커플의 예식 최종 체크리스트를 작성·저장하고 인쇄합니다.</p>
+        </div>
+
+        <div id="checklist-toolbar" class="toolbar">
+          <span class="ck-pick-label">대상 커플</span>
+          <select id="checklist-couple" class="filter-select"><!-- JS 렌더 --></select>
+          <span class="spacer"></span>
+          <span id="checklist-saved" class="muted"></span>
+          <button id="btn-checklist-print" class="btn btn-outline">🖨 인쇄</button>
+        </div>
+
+        <div id="checklist-empty" class="card" hidden>
+          <p class="muted">계약 완료(또는 예식 완료) 상태의 커플이 없습니다. 고객의 진행 상태를 “계약 완료”로 변경하면 여기에 표시됩니다.</p>
+        </div>
+
+        <div id="checklist-sheet" class="card checklist-sheet"><!-- JS 렌더 --></div>
       </section>
 
 

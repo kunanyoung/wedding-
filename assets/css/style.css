@@ -307,6 +307,59 @@ textarea { resize: vertical; }
 }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
+/* ---------- 예식 체크리스트 ---------- */
+.ck-pick-label { font-size: 13px; color: var(--ink-soft); }
+#checklist-couple { min-width: 240px; width: auto; }
+
+.checklist-sheet { padding: 26px 28px; }
+.ck-head { text-align: center; border-bottom: 2px solid var(--brand); padding-bottom: 16px; margin-bottom: 8px; }
+.ck-title { font-size: 23px; font-weight: 800; letter-spacing: .28em; color: var(--brand-dark); }
+.ck-sub { margin-top: 10px; font-size: 13.5px; color: var(--ink-soft); }
+
+.ck-section { margin-top: 24px; }
+.ck-section > h4 {
+  font-size: 13.5px; font-weight: 700; color: #fff; background: var(--brand);
+  display: inline-block; padding: 5px 15px; border-radius: 999px; margin: 0 0 10px;
+}
+
+.ck-item {
+  display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px; align-items: start;
+  padding: 9px 2px; border-bottom: 1px dashed var(--line);
+}
+.ck-item .ck-label { font-size: 14px; font-weight: 600; color: var(--ink); padding-top: 7px; }
+.ck-controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 2px 0; }
+.ck-field-input { max-width: 300px; }
+.ck-field-input.ck-num { max-width: 130px; }
+.ck-unit { color: var(--ink-soft); font-size: 13px; }
+.ck-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.ck-opt input[type="checkbox"] { width: 17px; height: 17px; flex: none; }
+.ck-fill { width: auto; min-width: 90px; max-width: 170px; padding: 6px 9px; }
+
+.ck-note {
+  margin: 8px 0 4px; background: var(--brand-soft); border-radius: 8px;
+  padding: 9px 13px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; white-space: pre-line;
+}
+.ck-note.warn { background: #fff2f4; color: #b23b4e; }
+
+.ck-foot {
+  margin-top: 26px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.7;
+  border-top: 1px solid var(--line); padding-top: 16px; white-space: pre-line;
+}
+
+/* 인쇄 — 체크리스트 한 장으로 출력 */
+@media print {
+  .app-header, .app-nav, .nav-backdrop, #checklist-toolbar, .view-head { display: none !important; }
+  .app-shell { display: block; min-height: 0; }
+  .app-content { padding: 0; overflow: visible; }
+  .view:not(.is-active) { display: none; }
+  .card { box-shadow: none; border: none; margin: 0; padding: 0; }
+  .ck-note, .ck-note.warn, .ck-section > h4 {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .ck-item { break-inside: avoid; }
+  .ck-section { break-inside: avoid; }
+}
+
 /* ---------- 7) 반응형 ---------- */
 @media (max-width: 900px) {
   .content-layout, .calendar-layout, .notify-layout, .dash-two-col { grid-template-columns: 1fr; }
@@ -316,6 +369,8 @@ textarea { resize: vertical; }
 }
 @media (max-width: 560px) {
   .form-grid { grid-template-columns: 1fr; }
+  .ck-item { grid-template-columns: 1fr; gap: 4px; }
+  .ck-item .ck-label { padding-top: 0; }
 }
 @media (max-width: 720px) {
   .app-shell { grid-template-columns: 1fr; grid-template-areas: "header" "content"; }

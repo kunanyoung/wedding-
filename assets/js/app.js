@@ -75,6 +75,7 @@
                         //  region, guests, budget, amount}
     contents: [],       // {id, hall, title, savedAt}
     notifyLogs: [],     // {id, target, type, at}
+    checklists: {},     // { [reservationId]: { values:{...}, updatedAt } } — 예식 체크리스트
   };
 
   function toast(msg) {
@@ -96,6 +97,7 @@
       if (raw) Object.assign(state, JSON.parse(raw));
       // 상태 값 정규화(레거시 호환)
       state.reservations.forEach((r) => { r.status = normStatus(r.status); });
+      if (!state.checklists || typeof state.checklists !== "object" || Array.isArray(state.checklists)) state.checklists = {};
     } catch (e) { console.warn("load 실패", e); }
   }
   function updateCacheInfo() {
@@ -115,6 +117,7 @@
     if (viewId === "view-customers") renderCustomers();
     if (viewId === "view-home") renderHome();
     if (viewId === "view-wedding") { renderWeddingCalendar(); renderWeddingDayList(); }
+    if (viewId === "view-checklist") renderChecklist();
   }
   function openNav() { $("#app-nav").classList.add("is-open"); $("#nav-backdrop").hidden = false; }
   function closeNav() { $("#app-nav").classList.remove("is-open"); $("#nav-backdrop").hidden = true; }
@@ -685,6 +688,231 @@
     });
   }
 
+  /* ---------- 8-2) 예식 체크리스트 (연구공원 웨딩홀 예식 최종 체크리스트) ---------- */
+  const CK_PLACE = "연구공원웨딩홀 1층 컨벤션홀";
+  let checklistResId = null;   // 현재 선택된 커플(예약) id
+
+  // 체크리스트 구성 — 원본 엑셀(예식 최종 체크리스트) 항목 기준
+  // item.t: "field"(입력) | "choice"(선택지) | "note"(안내문)
+  //  - field:  {k, label, input:"text|number", unit?, auto?, def?, ph?, extra?}
+  //  - choice: {k, label, opts:[{label, f?:fill입력여부, ph?}]}
+  //  - note:   {text, warn?}
+  const CHECKLIST = [
+    { sec: "예식 기본정보", items: [
+      { t: "field", k: "schedule", label: "예식일정", input: "text", auto: "schedule", ph: "예: 2026년 8월 25일 (토) 3시" },
+      { t: "field", k: "place", label: "장소", input: "text", auto: "place" },
+      { t: "field", k: "groom", label: "신 랑", input: "text", auto: "groom", extra: { k: "groomRel", label: "관계", ph: "예: 장남" } },
+      { t: "field", k: "groomFather", label: "신랑 父", input: "text", ph: "성함" },
+      { t: "field", k: "groomMother", label: "신랑 母", input: "text", ph: "성함" },
+      { t: "field", k: "bride", label: "신 부", input: "text", auto: "bride", extra: { k: "brideRel", label: "관계", ph: "예: 차녀" } },
+      { t: "field", k: "brideFather", label: "신부 父", input: "text", ph: "성함" },
+      { t: "field", k: "brideMother", label: "신부 母", input: "text", ph: "성함" },
+      { t: "note", text: "＊ 양가 부모님 성함/관계 꼭 체크해주세요 — 안내판에 표기되는 내용입니다. (관계 예: 장남, 차녀 등)" },
+    ]},
+    { sec: "피로연 · 식사", items: [
+      { t: "field", k: "banquetTime", label: "피로연장 이용시간", input: "text", def: "예식 30분 전부터 2시간", ph: "예: 2:30 ~ 4:30" },
+      { t: "note", text: "피로연장은 예식 30분 전부터 2시간 이용하며, 마감 10분 전 공식 마감멘트를 실시합니다." },
+      { t: "choice", k: "drink", label: "음 · 주류", opts: [{ label: "코스 (금액 기재)", f: true, ph: "₩" }] },
+      { t: "note", text: "탄산음료(디스펜서)·맥주(병)+소주(병)는 냉장 보관 중 셀프로 제공됩니다." },
+      { t: "field", k: "guaranteeAdult", label: "지불보증인원(대인)", input: "number", unit: "명" },
+      { t: "field", k: "guaranteeChild", label: "지불보증인원(소인)", input: "number", unit: "명" },
+      { t: "note", text: "소인 1인당 3,300원 · 미취학아동 무료 · 초등학생 소인 · 중학생부터 대인" },
+      { t: "note", warn: true, text: "예식 10일 전에는 지불보증인원 변경이 불가하니 신중히 결정하세요. 여유분 식사는 보증인원 기준 10%입니다. 보증인원 미달 시 100% 지급, 초과 시 실제 식사 인원만큼 계산됩니다." },
+    ]},
+    { sec: "청첩장 · 식권", items: [
+      { t: "field", k: "inviteGroom", label: "청첩장 (신랑)", input: "number", unit: "매" },
+      { t: "field", k: "inviteBride", label: "청첩장 (신부)", input: "number", unit: "매" },
+      { t: "field", k: "inviteTotal", label: "청첩장 총 수량", input: "number", unit: "매" },
+      { t: "choice", k: "ticket", label: "식 권", opts: [{ label: "기본구성" }, { label: "신랑·신부님 준비" }] },
+      { t: "note", text: "체크리스트 회신 시 준비하신 식권 사진을 첨부하여 메일(sw234567@naver.com) 또는 팩스(02-878-2465)로 보내주세요." },
+      { t: "note", warn: true, text: "모든 식권에 양가 발권 표시가 필요합니다. 신랑/신부 도장 또는 사인 표기 후 검수 부탁드립니다. (다른 팀과의 중복 구분을 위해 꼭 필요합니다.)" },
+    ]},
+    { sec: "주례 · 폐백", items: [
+      { t: "choice", k: "officiant", label: "주례섭외", opts: [{ label: "외부섭외", f: true, ph: "주례자 성함" }, { label: "주례 없는 예식" }] },
+      { t: "choice", k: "pastor", label: "목사님(종교식)", opts: [{ label: "예" }, { label: "아니오" }] },
+      { t: "field", k: "officiantNote", label: "주례 없는 예식 준비내용", input: "text", ph: "예: 사랑의 서약, 성혼선언, 덕담 등" },
+      { t: "note", text: "주례 없는 예식은 식순을 개인 준비하며, 성혼선언문·혼인서약서 내용을 자세히 기재 부탁드립니다. 식순 변동 시 예약실로 알려주세요." },
+      { t: "choice", k: "pyebaek", label: "폐 백", opts: [{ label: "유" }, { label: "무" }] },
+      { t: "field", k: "pyebaekFee", label: "폐백수모비", input: "text", def: "50,000원" },
+      { t: "note", text: "폐백수모비는 폐백을 마친 후 수모님께 직접 지불하시면 됩니다." },
+      { t: "choice", k: "pyebaekFood", label: "폐백음식", opts: [{ label: "개인준비" }, { label: "연구공원 신청", f: true, ph: "종류" }] },
+      { t: "note", text: "폐백 진행을 안 할 경우 사진 촬영 유/무를 선택하세요. 사진 촬영 시 수모비가 발생합니다. (인사 후 폐백으로 진행)" },
+    ]},
+    { sec: "스냅 · 비디오 · 영상", items: [
+      { t: "choice", k: "snap", label: "스냅", opts: [{ label: "연구공원 신청" }, { label: "외부섭외" }] },
+      { t: "choice", k: "video", label: "비디오", opts: [{ label: "연구공원 신청" }, { label: "외부섭외" }] },
+      { t: "field", k: "pkgVendor", label: "패키지(스·드·메) 업체", input: "text", ph: "업체명" },
+      { t: "choice", k: "live", label: "실시간 영상중계", opts: [{ label: "유" }, { label: "무" }] },
+      { t: "field", k: "liveGroom", label: "└ 신랑측 매수", input: "number", unit: "매" },
+      { t: "field", k: "liveBride", label: "└ 신부측 매수", input: "number", unit: "매" },
+      { t: "choice", k: "preVideo", label: "식전동영상", opts: [{ label: "연구공원 신청" }, { label: "개인준비" }, { label: "상영안함" }] },
+      { t: "note", text: "웨딩홀 스크린 상영용 3~4분 동영상. mp4 형식으로 예식주 수요일까지 sw234567@naver.com 전송. 연구공원 제작 시 예식 2주 전 사진 30~40장 메일. (전날·당일 테스트 불가)" },
+      { t: "choice", k: "midVideo", label: "식중동영상", opts: [{ label: "유" }, { label: "무" }] },
+    ]},
+    { sec: "축가 · 연주 · 사회", items: [
+      { t: "choice", k: "song", label: "축 가", opts: [{ label: "유" }, { label: "무" }, { label: "전체 MR 진행" }] },
+      { t: "field", k: "songTitles", label: "축가 곡목", input: "text", ph: "1- / 2-" },
+      { t: "note", text: "반주는 MR(mp3)로 준비, 예식주 수요일까지 sw234567@naver.com 전송. 무선 마이크 최대 2개 세팅 가능. (전날·당일 테스트 불가)" },
+      { t: "choice", k: "music", label: "웨딩연주", opts: [{ label: "무" }, { label: "연구공원 신청", f: true, ph: "금액/호수" }] },
+      { t: "note", text: "연주가 없을 경우 기본 MR로 진행됩니다. 피아노3중주 330,000원 / 재즈4중주 440,000원 / 남성4중창+피아노 550,000원" },
+      { t: "choice", k: "mc", label: "사회자 섭외", opts: [{ label: "신랑님 친구", f: true, ph: "성함" }, { label: "외부섭외", f: true, ph: "업체/성함" }] },
+    ]},
+    { sec: "포토테이블 · 액자 · 버스 · 예도", items: [
+      { t: "choice", k: "phototable", label: "포토테이블", opts: [{ label: "연구공원 신청", f: true, ph: "호수" }, { label: "개인준비" }, { label: "무" }] },
+      { t: "note", text: "예식 당일 사진 5*7 Size 준비. 포토테이블 액자 최대 10개, 대형액자 이젤 최대 2개까지 준비해 드립니다." },
+      { t: "field", k: "dpFrame", label: "대형 DP액자", input: "number", unit: "개" },
+      { t: "field", k: "busGroom", label: "대형버스 (신랑측)", input: "text", ph: "대수 / 출발지" },
+      { t: "field", k: "busBride", label: "대형버스 (신부측)", input: "text", ph: "대수 / 출발지" },
+      { t: "choice", k: "yedo", label: "예도(들러리)", opts: [{ label: "있음" }, { label: "없음" }, { label: "연구공원 신청", f: true, ph: "종류" }] },
+    ]},
+    { sec: "홀 · 정산", items: [
+      { t: "field", k: "hallFee", label: "홀대관료", input: "text", def: "무료 (폐백실 사용료 포함 · 원삼/족두리/사모/관대 등, 한복은 개인 준비)" },
+      { t: "field", k: "deposit", label: "계약금", input: "number", unit: "원" },
+      { t: "choice", k: "meal", label: "식대 결제", opts: [{ label: "½씩 결제" }, { label: "신랑측 전체" }, { label: "신부측 전체" }, { label: "신랑·신부 따로" }] },
+      { t: "field", k: "option", label: "선택품목(옵션)", input: "text", ph: "옵션 내용" },
+      { t: "note", warn: true, text: "정산 시 카드결제는 당일 한도를 필히 확인 바랍니다 (체크카드 포함). 화촉점화 에스코트·피로연장 인사 신청 시 110,000원." },
+    ]},
+  ];
+
+  const CK_FOOT =
+    "* 전체 내용 체크 후 예식 14일 전까지 메일로 보내주시기 바랍니다. 1차 점검 후 연락드리겠습니다.\n" +
+    "* 예식 당일 성혼선언문·DP액자·포토테이블 사진은 정산 시 관계자분께 확인 후 인계합니다.\n" +
+    "* 주차 무료 (낙성대 방향 서울대 후문). 서울대 정·후문 통과 시 통행료 1,500원이 부과됩니다.\n" +
+    "* 문의: 연구공원 웨딩 예약실  T. 02-878-0465";
+
+  const WDAY = ["일", "월", "화", "수", "목", "금", "토"];
+  function fmtWeddingDate(s) {
+    const d = parseYmd(s);
+    if (!d) return s || "";
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${WDAY[d.getDay()]})`;
+  }
+
+  // 예약 데이터에서 자동으로 채울 값
+  function ckAuto(key, r) {
+    switch (key) {
+      case "schedule": return r.wedding ? fmtWeddingDate(r.wedding) : "";
+      case "place": return r.venue || CK_PLACE;
+      case "groom": return r.groom || "";
+      case "bride": return r.bride || "";
+      default: return "";
+    }
+  }
+
+  // 계약 완료(또는 예식 완료) 커플 — 예식일 순 정렬
+  function contractedCouples() {
+    return state.reservations.filter(isContracted)
+      .slice()
+      .sort((a, b) => (a.wedding || "9999").localeCompare(b.wedding || "9999"));
+  }
+
+  // 저장값 + 자동값 병합 (저장값 우선, 빈 항목만 자동/기본값으로 채움)
+  function ckValues(r) {
+    const vals = {};
+    CHECKLIST.forEach((sec) => sec.items.forEach((it) => {
+      if (it.t !== "field") return;
+      if (it.auto) { const a = ckAuto(it.auto, r); if (a) vals[it.k] = a; }
+      else if (it.def) vals[it.k] = it.def;
+    }));
+    const saved = (state.checklists[r.id] || {}).values || {};
+    Object.assign(vals, saved);
+    return vals;
+  }
+
+  function ckFieldHtml(it, vals) {
+    const type = it.input === "number" ? "number" : "text";
+    let h = `<div class="ck-item"><span class="ck-label">${escapeHtml(it.label)}</span><div class="ck-controls">`;
+    h += `<input class="ck-field-input${it.input === "number" ? " ck-num" : ""}" type="${type}" data-ck="${it.k}" value="${escapeAttr(vals[it.k] || "")}" placeholder="${escapeAttr(it.ph || "")}">`;
+    if (it.unit) h += `<span class="ck-unit">${escapeHtml(it.unit)}</span>`;
+    if (it.extra) {
+      h += `<span class="ck-unit">${escapeHtml(it.extra.label)}</span>`;
+      h += `<input class="ck-fill" type="text" data-ck="${it.extra.k}" value="${escapeAttr(vals[it.extra.k] || "")}" placeholder="${escapeAttr(it.extra.ph || "")}">`;
+    }
+    h += `</div></div>`;
+    return h;
+  }
+
+  function ckChoiceHtml(it, vals) {
+    let h = `<div class="ck-item"><span class="ck-label">${escapeHtml(it.label)}</span><div class="ck-controls">`;
+    it.opts.forEach((o, i) => {
+      const ck = `${it.k}__${i}`;
+      const on = vals[ck] ? " checked" : "";
+      h += `<label class="ck-opt"><input type="checkbox" data-ck="${ck}"${on}>${escapeHtml(o.label)}`;
+      if (o.f) h += `<input class="ck-fill" type="text" data-ck="${ck}_t" value="${escapeAttr(vals[ck + "_t"] || "")}" placeholder="${escapeAttr(o.ph || "")}">`;
+      h += `</label>`;
+    });
+    h += `</div></div>`;
+    return h;
+  }
+
+  function ckNoteHtml(it) {
+    return `<div class="ck-note${it.warn ? " warn" : ""}">${escapeHtml(it.text)}</div>`;
+  }
+
+  function renderChecklistSheet(r) {
+    const sheet = $("#checklist-sheet");
+    if (!sheet) return;
+    const vals = ckValues(r);
+    const subParts = [
+      r.name || "(무명)",
+      r.wedding ? "예식일 " + fmtWeddingDate(r.wedding) : "예식일 미정",
+      r.venue || CK_PLACE,
+      "담당 " + (r.manager || "미지정"),
+    ];
+    let h = `<div class="ck-head">
+        <div class="ck-title">예 식 최 종 체 크 리 스 트</div>
+        <div class="ck-sub">${escapeHtml(subParts.join("  ·  "))}</div>
+      </div>`;
+    CHECKLIST.forEach((sec) => {
+      h += `<div class="ck-section"><h4>${escapeHtml(sec.sec)}</h4>`;
+      sec.items.forEach((it) => {
+        if (it.t === "field") h += ckFieldHtml(it, vals);
+        else if (it.t === "choice") h += ckChoiceHtml(it, vals);
+        else if (it.t === "note") h += ckNoteHtml(it);
+      });
+      h += `</div>`;
+    });
+    h += `<div class="ck-foot">${escapeHtml(CK_FOOT)}</div>`;
+    sheet.innerHTML = h;
+
+    const meta = state.checklists[r.id];
+    $("#checklist-saved").textContent = meta && meta.updatedAt ? `최근 저장 ${meta.updatedAt}` : "자동 저장됨";
+  }
+
+  function renderChecklist() {
+    const sel = $("#checklist-couple");
+    const empty = $("#checklist-empty");
+    const sheet = $("#checklist-sheet");
+    if (!sel) return;
+    const couples = contractedCouples();
+    if (couples.length === 0) {
+      sel.innerHTML = `<option value="">대상 커플 없음</option>`;
+      empty.hidden = false; sheet.hidden = true;
+      $("#checklist-saved").textContent = "";
+      return;
+    }
+    empty.hidden = true; sheet.hidden = false;
+    if (!couples.some((c) => c.id === checklistResId)) checklistResId = couples[0].id;
+    sel.innerHTML = couples.map((c) =>
+      `<option value="${c.id}">${escapeHtml((c.wedding || "예식일 미정") + " · " + (c.name || "(무명)"))}</option>`).join("");
+    sel.value = checklistResId;
+    renderChecklistSheet(state.reservations.find((x) => x.id === checklistResId));
+  }
+
+  // 현재 시트의 모든 입력값을 수집해 저장
+  function collectAndSaveChecklist() {
+    if (!checklistResId) return;
+    const vals = {};
+    $$("#checklist-sheet [data-ck]").forEach((el) => {
+      const k = el.dataset.ck;
+      if (el.type === "checkbox") { if (el.checked) vals[k] = true; }
+      else if (el.value !== "") vals[k] = el.value;
+    });
+    state.checklists[checklistResId] = { values: vals, updatedAt: ymd(nowDate()) };
+    save();
+    const meta = state.checklists[checklistResId];
+    $("#checklist-saved").textContent = `최근 저장 ${meta.updatedAt}`;
+  }
+
   /* ---------- 고객/상담 모달 (캘린더·고객관리 공용) ---------- */
   function fillStatusOptions() {
     $("#res-status").innerHTML = STATUS_KEYS.map((k) => `<option value="${k}">${STATUS_KO[k]}</option>`).join("");
@@ -798,7 +1026,7 @@
     selectedDate = data.date;
     initCalendarToDate(new Date(data.date + "T00:00"));
     renderCalendar(); renderDayList(); renderContract(); renderCustomers(); renderHome();
-    renderWeddingCalendar(); renderWeddingDayList();
+    renderWeddingCalendar(); renderWeddingDayList(); renderChecklist();
     closeReservationModal();
     toast("고객 정보를 저장했습니다.");
   }
@@ -807,8 +1035,9 @@
     const id = $("#res-id").value;
     if (!confirm("이 고객 정보를 삭제할까요?")) return;
     state.reservations = state.reservations.filter((x) => x.id !== id);
+    delete state.checklists[id];
     save(); renderCalendar(); renderDayList(); renderContract(); renderCustomers();
-    renderHome(); renderWeddingCalendar(); renderWeddingDayList();
+    renderHome(); renderWeddingCalendar(); renderWeddingDayList(); renderChecklist();
     closeReservationModal();
     toast("삭제했습니다.");
   }
@@ -935,6 +1164,7 @@
     renderDayList();
     renderWeddingCalendar();
     renderWeddingDayList();
+    renderChecklist();
     renderNotifyHistory();
     renderNotifyOptions();
     updateCacheInfo();
@@ -1000,6 +1230,15 @@
     $("#wed-prev").addEventListener("click", () => { wedMonth--; if (wedMonth < 0) { wedMonth = 11; wedYear--; } renderWeddingCalendar(); });
     $("#wed-next").addEventListener("click", () => { wedMonth++; if (wedMonth > 11) { wedMonth = 0; wedYear++; } renderWeddingCalendar(); });
     $("#wed-today").addEventListener("click", () => { initWeddingCal(nowDate()); wedSelected = ymd(nowDate()); renderWeddingCalendar(); renderWeddingDayList(); });
+    // 예식 체크리스트
+    $("#checklist-couple").addEventListener("change", (e) => {
+      checklistResId = e.target.value;
+      renderChecklistSheet(state.reservations.find((x) => x.id === checklistResId));
+    });
+    $("#checklist-sheet").addEventListener("input", collectAndSaveChecklist);
+    $("#checklist-sheet").addEventListener("change", collectAndSaveChecklist);
+    $("#btn-checklist-print").addEventListener("click", () => window.print());
+
     $("#reservation-form").addEventListener("submit", saveReservation);
     $("#res-status").addEventListener("change", toggleFailReason);
     $("#res-source").addEventListener("change", toggleConsult);
@@ -1057,7 +1296,7 @@
     $("#data-import-file").addEventListener("change", (e) => { if (e.target.files[0]) importAll(e.target.files[0]); e.target.value = ""; });
     $("#btn-reset-data").addEventListener("click", () => {
       if (confirm("모든 데이터를 삭제합니다. 계속할까요?")) {
-        state.metrics = []; state.reservations = []; state.contents = []; state.notifyLogs = [];
+        state.metrics = []; state.reservations = []; state.contents = []; state.notifyLogs = []; state.checklists = {};
         save(); renderAll(); toast("데이터를 초기화했습니다.");
       }
     });
